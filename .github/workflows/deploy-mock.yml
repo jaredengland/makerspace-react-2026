@@ -1,0 +1,50 @@
+# Builds the static mock portal (yarn build:static) and uploads dist-static/ over SFTP.
+# Needs repo secret SSH_PRIVATE_KEY and variables SSH_HOST, SSH_USER, SSH_PORT,
+# SSH_KNOWN_HOSTS and DEPLOY_PATH (the subdomain's document root).
+name: Deploy mock portal
+
+on:
+  push:
+    branches: [feature/mock-dev-mode]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - name: Refuse to deploy over a production site
+        env:
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          if [ -z "$DEPLOY_PATH" ]; then echo "DEPLOY_PATH is not set"; exit 1; fi
+          case "${DEPLOY_PATH%/}" in
+            */public_html) echo "Refusing to deploy to public_html"; exit 1 ;;
+          esac
+
+      - run: yarn install --frozen-lockfile
+      - run: STATIC_BASE="" yarn build:static
+
+      - name: Upload over SFTP
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          SSH_USER: ${{ vars.SSH_USER }}
+          SSH_PORT: ${{ vars.SSH_PORT }}
+          SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # No --delete: files already on the server that aren't in the build are left alone.
+          lftp -c "set sftp:connect-program 'ssh -a -x -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts -o StrictHostKeyChecking=yes'; \
+            open -p $SSH_PORT sftp://$SSH_USER:x@$SSH_HOST; \
+            mirror -R --verbose --parallel=4 dist-static/ $DEPLOY_PATH"
