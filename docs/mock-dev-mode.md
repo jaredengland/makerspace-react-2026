@@ -1,0 +1,23 @@
+# Mock dev mode
+
+Run the portal without Rails, MongoDB, Redis or Braintree:
+
+```sh
+yarn install --frozen-lockfile
+yarn start:mock
+```
+
+Open http://localhost:3035 and sign in with any password:
+
+- `admin@example.com` for the staff view (members, billing, rentals, analytics).
+- Any other email for a regular member.
+
+`dev.mock.config.js` is the normal dev build with `/api` answered by `mock/server.cjs`
+instead of proxied to Rails. Fixtures live in `mock/fixtures.cjs`; all data is invented.
+Collections return arrays with a `total-items` header, unknown GET requests return an
+empty list, and unknown writes echo the request body, so most screens render. Changes
+are kept in memory only for sign-in; other writes are not persisted.
+
+Known gaps: analytics, tool checkouts, workshops, reservations and volunteer screens
+show empty or partial data until fixtures are added for them. Add fixtures for a screen
+you are working on rather than relying on the empty defaults.
