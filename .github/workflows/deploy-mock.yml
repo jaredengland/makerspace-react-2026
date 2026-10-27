@@ -78,7 +78,8 @@ jobs:
           set cmd:fail-exit yes
           set net:max-retries 2
           set sftp:connect-program "ssh -a -x -i $HOME/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
-          open sftp://$SSH_USER@$SSH_HOST:$SSH_PORT
+          # lftp only passes the user name to ssh when a password is given; the dummy one is unused with key auth.
+          open -u "$SSH_USER,unused" -p $SSH_PORT sftp://$SSH_HOST
           mirror -R --verbose --parallel=4 dist-static $DEPLOY_PATH
           EOF
           sed -i 's/^ *//' "$RUNNER_TEMP/deploy.lftp"
