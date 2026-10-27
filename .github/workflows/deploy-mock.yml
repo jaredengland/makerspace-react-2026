@@ -28,6 +28,21 @@ jobs:
             */public_html) echo "Refusing to deploy to public_html"; exit 1 ;;
           esac
 
+      - name: Check required settings
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          SSH_USER: ${{ vars.SSH_USER }}
+          SSH_PORT: ${{ vars.SSH_PORT }}
+          SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
+        run: |
+          missing=""
+          [ -z "$SSH_PRIVATE_KEY" ] && missing="$missing secret:SSH_PRIVATE_KEY"
+          for name in SSH_HOST SSH_USER SSH_PORT SSH_KNOWN_HOSTS; do
+            [ -z "${!name}" ] && missing="$missing variable:$name"
+          done
+          if [ -n "$missing" ]; then echo "Missing repo settings:$missing"; exit 1; fi
+
       - run: yarn install --frozen-lockfile
       - run: STATIC_BASE="" yarn build:static
 
@@ -46,9 +61,9 @@ jobs:
           SSH_USER: ${{ vars.SSH_USER }}
           SSH_PORT: ${{ vars.SSH_PORT }}
         run: |
-          ssh -v -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=yes \
+          ssh -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -i "$HOME/.ssh/deploy_key" \
-            -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'echo connected' 2>&1 | grep -vi "^debug1: \(Reading\|identity\|Offering\)" | tail -25
+            -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'echo connected'
 
       - name: Upload over SFTP
         env:
