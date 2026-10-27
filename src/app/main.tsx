@@ -34,7 +34,8 @@ const root = createRoot(container);
 
 root.render(
   <Provider store={store}>
-    <BrowserRouter>
+    {/* Hosts that serve the app from a sub-path (e.g. the static demo) set this global first. */}
+    <BrowserRouter basename={(window as any).__APP_BASENAME__ || undefined}>
       <ThemeProvider theme={theme}>
         <BaseStyles />
         <ToastContextProvider>

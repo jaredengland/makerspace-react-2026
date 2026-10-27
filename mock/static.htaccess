@@ -1,0 +1,5 @@
+# Send client-side routes (/home, /members, ...) to the app; real files are served as-is.
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ __BASE__/index.html [L]

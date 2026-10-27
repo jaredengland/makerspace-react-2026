@@ -21,3 +21,4 @@ package-lock.json
 
 # Local dependency and visual-check caches
 .cache/
+dist-static/
