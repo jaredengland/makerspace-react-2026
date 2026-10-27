@@ -31,20 +31,40 @@ jobs:
       - run: yarn install --frozen-lockfile
       - run: STATIC_BASE="" yarn build:static
 
-      - name: Upload over SFTP
+      - name: Set up SSH key
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/deploy_key" && chmod 600 "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+
+      - name: Check the SSH connection
+        env:
           SSH_HOST: ${{ vars.SSH_HOST }}
           SSH_USER: ${{ vars.SSH_USER }}
           SSH_PORT: ${{ vars.SSH_PORT }}
-          SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
+        run: |
+          ssh -v -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -i "$HOME/.ssh/deploy_key" \
+            -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'echo connected' 2>&1 | grep -vi "^debug1: \(Reading\|identity\|Offering\)" | tail -25
+
+      - name: Upload over SFTP
+        env:
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          SSH_USER: ${{ vars.SSH_USER }}
+          SSH_PORT: ${{ vars.SSH_PORT }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq lftp
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           # No --delete: files already on the server that aren't in the build are left alone.
-          lftp -c "set sftp:connect-program 'ssh -a -x -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts -o StrictHostKeyChecking=yes'; \
-            open -p $SSH_PORT sftp://$SSH_USER:x@$SSH_HOST; \
-            mirror -R --verbose --parallel=4 dist-static/ $DEPLOY_PATH"
+          cat > "$RUNNER_TEMP/deploy.lftp" <<EOF
+          set cmd:fail-exit yes
+          set net:max-retries 2
+          set sftp:connect-program "ssh -a -x -i $HOME/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+          open sftp://$SSH_USER@$SSH_HOST:$SSH_PORT
+          mirror -R --verbose --parallel=4 dist-static $DEPLOY_PATH
+          EOF
+          sed -i 's/^ *//' "$RUNNER_TEMP/deploy.lftp"
+          lftp -f "$RUNNER_TEMP/deploy.lftp"
