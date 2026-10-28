@@ -7,6 +7,7 @@ const webpack = require('webpack');
 const base = require('./prod.config.js');
 const HtmlWebPackPlugin = require('html-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 
 module.exports = env => {
   const staticBase = (process.env.STATIC_BASE ?? '/mm').replace(/\/$/, '');
@@ -14,7 +15,14 @@ module.exports = env => {
   return {
     ...config,
     entry: ['./mock/browser.js', ...config.entry],
-    output: { ...config.output, path: path.resolve(__dirname, 'dist-static/assets'), publicPath: `${staticBase}/assets/` },
+    // Content-hashed file names, so a redeploy can never mix a cached old chunk with a new main bundle.
+    output: {
+      ...config.output,
+      path: path.resolve(__dirname, 'dist-static/assets'),
+      publicPath: `${staticBase}/assets/`,
+      filename: 'app.[contenthash:8].js',
+      chunkFilename: 'chunk.[name].[contenthash:8].js',
+    },
     module: {
       rules: [
         { test: /(LoginPage\.tsx|rentalLabel\.ts)$/, enforce: 'pre', loader: path.resolve(__dirname, 'mock/base-path-loader.js'), options: { base: staticBase } },
@@ -22,7 +30,8 @@ module.exports = env => {
       ],
     },
     plugins: [
-      ...config.plugins.filter(p => !(p instanceof HtmlWebPackPlugin) && !(p instanceof CopyWebpackPlugin)),
+      ...config.plugins.filter(p => !(p instanceof HtmlWebPackPlugin) && !(p instanceof CopyWebpackPlugin) && !(p instanceof MiniCssExtractPlugin)),
+      new MiniCssExtractPlugin({ filename: 'app.[contenthash:8].css', chunkFilename: 'chunk.[name].[contenthash:8].css' }),
       new webpack.DefinePlugin({ __STATIC_BASE__: JSON.stringify(staticBase) }),
       new HtmlWebPackPlugin({ template: './src/assets/index.html', filename: '../index.html' }),
       new CopyWebpackPlugin({

@@ -3,3 +3,13 @@ RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ __BASE__/index.html [L]
+
+# The page itself must always be re-checked; the hashed files under assets/ can be cached for good.
+<FilesMatch "^index\.html$">
+  Header set Cache-Control "no-cache"
+</FilesMatch>
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType text/css "access plus 1 year"
+</IfModule>
