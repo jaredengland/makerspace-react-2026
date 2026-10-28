@@ -18,7 +18,6 @@ const collection = (rows, query) => {
 function createHandler(store) {
   let current = store && store.get() ? personas[store.get()] : null;
   const setCurrent = key => { current = key ? personas[key] : null; if (store) store.set(key); };
-  const isAdmin = () => !!(current && current.isAdmin);
 
   return function handle({ method, path, query, body }) {
     if (path === '/config') return json({ wiki_url: '' });
@@ -42,7 +41,8 @@ function createHandler(store) {
       return json(members.find(m => m.id === memberRoute[1]) || current);
     }
 
-    const scope = rows => (isAdmin() || path.startsWith('/admin') ? rows : rows.filter(r => r.memberId === current.id));
+    // Like Rails: /api/<thing> is the signed-in member's own records; /api/admin/<thing> is everyone's.
+    const scope = rows => (path.startsWith('/admin') ? rows : rows.filter(r => r.memberId === current.id));
     if (/^(\/admin)?\/invoices$/.test(path) && method === 'GET') {
       let rows = scope(invoices);
       if (query.get('pastDue') === 'true') rows = rows.filter(r => r.pastDue);
@@ -50,6 +50,15 @@ function createHandler(store) {
       return collection(rows, query);
     }
     if (/^(\/admin)?\/rentals$/.test(path) && method === 'GET') return collection(scope(rentals), query);
+
+    const rentalRoute = path.match(/^(?:\/admin)?\/rentals\/([^/]+)$/);
+    if (rentalRoute) {
+      const rental = rentals.find(r => r.id === rentalRoute[1]);
+      if (!rental) return json({ error: 'Not found' }, 404);
+      // Signing the agreement (or any edit) sticks for the session.
+      if (method === 'PUT' || method === 'PATCH') Object.assign(rental, body, body.signature ? { contractOnFile: true, status: 'active' } : {});
+      return json(rental);
+    }
 
     if (method === 'GET') return collection([], query);
     return json({ id: 'mock', ...(body || {}) });
