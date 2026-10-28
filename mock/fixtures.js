@@ -60,4 +60,53 @@ const home = (who) => ({
   ],
 });
 
-module.exports = { personas, members, invoices, rentals, home };
+const shopTools = [
+  { id: 't-saw', name: 'Table saw', wikiUrl: '', disabled: false, reservable: true, prerequisiteIds: [], prerequisiteNames: [], unmetPrerequisiteIds: [], unmetPrerequisiteNames: [], checkoutRequestable: true, reservationAvailable: true, description: 'Cabinet saw with a riving knife.', locationName: 'Woodshop' },
+  { id: 't-lathe', name: 'Wood lathe', wikiUrl: '', disabled: false, reservable: false, prerequisiteIds: [], prerequisiteNames: [], unmetPrerequisiteIds: [], unmetPrerequisiteNames: [], checkoutRequestable: true, reservationAvailable: false, locationName: 'Woodshop' },
+  { id: 't-laser', name: 'Laser cutter', wikiUrl: '', disabled: false, reservable: true, prerequisiteIds: [], prerequisiteNames: [], unmetPrerequisiteIds: [], unmetPrerequisiteNames: [], checkoutRequestable: true, reservationAvailable: true, locationName: 'Electronics' },
+];
+const shop = (id, name, tools) => ({
+  id, name, wikiUrl: '', slackChannel: name.toLowerCase(), disabled: false, reservable: true,
+  reservationsAvailable: true, resourceManagersWikiUrl: '', resourceManagers: [{ id: 'm3', name: 'Jordan Lee' }],
+  upcomingVolunteerEvents: [], volunteerTasks: [], canAddTool: false, canCreateVolunteerTask: false,
+  isShopManager: false, tools,
+});
+const workshops = { canAddShop: false, workshops: [shop('s-wood', 'Woodshop', shopTools.slice(0, 2)), shop('s-elec', 'Electronics', shopTools.slice(2))] };
+
+const catalogShop = (w) => ({
+  id: w.id, name: w.name, wikiUrl: '', slackChannel: w.slackChannel, disabled: false, toolCount: w.tools.length,
+  reservable: true, maxConcurrentReservations: 2, reservationHorizonDays: 30, maxReservationDurationHours: 4,
+  reservationRequiresApproval: false, reservationPrerequisiteToolIds: [],
+});
+const reservationCatalog = {
+  toolGroups: [],
+  shops: workshops.workshops.map(catalogShop),
+  tools: shopTools.map((t, i) => ({ ...t, shopId: i < 2 ? 's-wood' : 's-elec' })),
+};
+
+const fixCatalog = {
+  shops: [{ id: 's-wood', name: 'Woodshop' }, { id: 's-elec', name: 'Electronics' }],
+  tools: [{ id: 't-saw', name: 'Table saw', shopId: 's-wood', outOfService: false }, { id: 't-laser', name: 'Laser cutter', shopId: 's-elec', outOfService: false }],
+  canCreate: true, openCount: 1, openLimit: null, centralSlackEnabled: false, assignees: [], creationUnavailableReason: null,
+};
+const fixTickets = [{
+  id: 'fix1', title: 'Blade guard is loose', description: 'The blade guard rattles at high speed.', category: 'broken',
+  status: 'open', confirmation: 'unverified', priority: 2, submittedPriority: 2, shopId: 's-wood', shopName: 'Woodshop',
+  toolId: 't-saw', toolName: 'Table saw', outOfService: false, publicReadOnly: false, iBrokeIt: false, iCanFixIt: false,
+  assignees: [], announceToSlack: false, announcementNote: '', revision: 1,
+  createdAt: new Date(now() - 2 * DAY).toISOString(), updatedAt: new Date(now() - DAY).toISOString(),
+  capabilities: {}, reporter: { id: 'm3', name: 'Jordan Lee' },
+}];
+
+const systemConfig = {
+  checkout: { checkout_expiration_notice_days: 14, can_manage: true },
+  flags: { slack_sync_enabled: false, slack_profile_sync_enabled: false, volunteer_bounty_token_enabled: false, require_totp_admin: false, require_totp_board: false, require_totp_rm: false, signup_lockout_enabled: false },
+  jobs: [{ key: 'card_expiration_check', task: 'Card expiration check', last_run_at: new Date(now() - DAY).toISOString(), last_run_status: 'success' }],
+  slack: { slack_channel_treasurer: '', slack_channel_rm: '', slack_channel_admin: '', slack_channel_logs: '', slack_channel_tickets: '', slack_channel_new_members: '', volunteer_pending_slack_channel: '', channel_cache: { available: false, total_channels: null, last_updated_at: null } },
+  volunteer: { volunteer_credits_per_discount: '10', volunteer_max_discounts_per_year: '12', volunteer_discount_id: '', volunteer_task_max_credit: '5', ticket_bounty_max_credit: '5', volunteer_bounty_token: '', volunteer_rolling_days: '30', volunteer_leaderboard_top: '10' },
+  totp: { require_totp_admin: false, require_totp_board: false, require_totp_rm: false },
+  reservation: { reservation_token: '' },
+  job_schedule: { channel_cache_refresh_day: '1', card_expiration_check_day: '1', garbage_collect_day: '1' },
+};
+
+module.exports = { personas, members, invoices, rentals, home, workshops, reservationCatalog, fixCatalog, fixTickets, systemConfig };

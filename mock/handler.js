@@ -3,7 +3,7 @@
 // Collections are arrays with a `total-items` header; unknown GETs return an
 // empty collection and unknown writes echo back `{ id: 'mock', ...body }`, so
 // screens render without a backend. Add fixtures to fixtures.js as screens need them.
-const { personas, members, invoices, rentals, home } = require('./fixtures.js');
+const { personas, members, invoices, rentals, home, workshops, reservationCatalog, fixCatalog, fixTickets, systemConfig } = require('./fixtures.js');
 
 const json = (body, status = 200, headers = {}) => ({ status, headers, body });
 
@@ -50,6 +50,16 @@ function createHandler(store) {
       return collection(rows, query);
     }
     if (/^(\/admin)?\/rentals$/.test(path) && method === 'GET') return collection(scope(rentals), query);
+
+    if (method === 'GET') {
+      if (path === '/workshops') return json(workshops);
+      if (path === '/reservation_catalog') return json(reservationCatalog);
+      if (path === '/fix_tickets/catalog') return json(fixCatalog);
+      if (path === '/fix_tickets') return json({ tickets: fixTickets, total: fixTickets.length });
+      const ticket = path.match(/^\/fix_tickets\/([^/]+)$/);
+      if (ticket) return json(fixTickets.find(t => t.id === ticket[1]) || { error: 'Not found' }, fixTickets.some(t => t.id === ticket[1]) ? 200 : 404);
+      if (path === '/admin/system_configs') return json(systemConfig);
+    }
 
     const rentalRoute = path.match(/^(?:\/admin)?\/rentals\/([^/]+)$/);
     if (rentalRoute) {
