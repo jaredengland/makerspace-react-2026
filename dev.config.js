@@ -22,7 +22,13 @@ module.exports = env => ({
       {
         // Third-party CSS (Leaflet) is loaded as a string and injected at
         // runtime, so it needs no CSS extraction/Rails stylesheet wiring.
+        test: /shadcn\.css$/,
+        type: "asset/source",
+        use: ["postcss-loader"]
+      },
+      {
         test: /\.css$/,
+        exclude: /shadcn\.css$/,
         type: "asset/source"
       },
       {

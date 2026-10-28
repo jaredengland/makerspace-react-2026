@@ -25,6 +25,7 @@ import { defaultLoginDestination } from 'ui/auth/loginDestination';
 const lazyRoute = <T extends React.ComponentType<any>>(factory: () => Promise<{ default: T }>) => React.lazy(factory);
 const HomePage = lazyRoute(() => import(/* webpackChunkName: "member-home" */ 'ui/home/HomePage'));
 
+const ShadcnDashboardPoc = lazyRoute(() => import(/* webpackChunkName: "shadcn-poc" */ 'poc/shadcn/ShadcnDashboardPoc'));
 const RentalsList = lazyRoute(() => import(/* webpackChunkName: "member-rentals", webpackPrefetch: true */ 'ui/rentals/RentalsList'));
 const EarnedMembershipsList = lazyRoute(() => import(/* webpackChunkName: "earned-memberships", webpackPrefetch: true */ 'ui/earnedMemberships/EarnedMembershipsList'));
 const BillingContainer = lazyRoute(() => import(/* webpackChunkName: "billing", webpackPrefetch: true */ 'ui/billing/BillingContainer'));
@@ -86,6 +87,7 @@ const PrivateRouting: React.FC<Props> = ({ currentUserId, permissions }) => {
     <React.Suspense fallback={<LoadingOverlay id="body" />}>
     <Routes>
       <Route path={Routing.Home} element={<HomePage />} />
+      <Route path='/poc/shadcn' element={<ShadcnDashboardPoc />} />
       {/* App owns these authenticated handoffs, preventing competing redirects. */}
       <Route path={Routing.Root} element={null} />
       <Route path={Routing.Login} element={null} />
