@@ -1,5 +1,48 @@
 # Browser checks
 
+## Reservation announcements
+
+After `yarn build`, run `node tests/browser/reservation-announcements.cjs`. It
+uses the real shared shop editor with mocked APIs to check a shop-scoped RM's
+empty-agenda preference: default off, availability when whole-shop reservations
+are off, keyboard focus/toggling, saved true/false reload, failed-save recovery,
+and page/dialog overflow at 320/600/900/1280 px. Screenshots are saved under
+`tmp/reservation-announcements-browser`. This does not replace server-side
+authorization, real Slack delivery, or live canvas-access verification.
+
+## Continuous paid membership
+
+Build with `yarn webpack --config tests/browser/paid-membership/webpack.cjs`, then
+run `node tests/browser/paid-membership/check.cjs`. Real profile controls with
+mocked APIs cover owner/Admin/Board/Resource Manager visibility, estimated history,
+keyboard dialog access/focus, integer/reason validation, success, conflict refresh,
+loading/retry, revoked eligibility and overflow at 320/600/900/1280 px. Screenshots
+are saved under `tmp/paid-membership-browser`. This does not replace Rails-backed
+disposable-data acceptance or processor refund verification.
+
+## Header menu
+
+After `yarn build`, run `node tests/browser/header-menu.cjs`. Mocked sessions cover
+admin, Board, Resource Manager and ordinary-member visibility, disabled billing,
+the final administrative group/separator, keyboard focus and navigation, and
+320/600/900/1280 px layouts. Screenshots are in `tmp/header-menu-browser`.
+The check invokes the actual E2E menu helpers for My Profile, Members, generic
+navigation, Billing, Rentals, Tool Checkouts and Volunteer, verifying destination
+URLs and menu dismissal for each accessible route. Run `node tests/browser/home.cjs`
+as well to cover login followed by profile navigation in the smoke-test setup.
+
+## Eventbrite
+
+After building, `node tests/browser/eventbrite-announcements.cjs` checks the
+Upcoming Events Channel setting with mocked APIs: keyboard editing, channel
+normalization, blank/default behavior, and 320/600/900/1280 px layouts.
+
+After `yarn build`, run `node tests/browser/eventbrite.cjs`. The production bundle
+uses mocked APIs in a disposable Edge/Chromium session to verify staff history,
+retry, details, keyboard access, ordinary-member denial, provider answer/skip and overflow at
+320/600/900/1280 px. Screenshots are in `tmp/eventbrite-browser`. This does not
+replace controlled Eventbrite webhook delivery or Rails-backed acceptance.
+
 ## Checkout Required sheets
 
 Run `yarn build`. In the Rails checkout, with its disposable test environment
@@ -90,3 +133,12 @@ with mocked APIs exercise training links, keyboard opening, individual Never
 edits/revision payloads, renewal, bulk count confirmation, and overflow at
 320/600/900/1280 px. Screenshots go to `tmp/checkout-expiration-browser`.
 This does not replace transactional Rails or disposable-data E2E coverage.
+
+## Reservation terminal history
+
+After `yarn build`, run `node tests/browser/reservations.cjs`.
+The production bundle uses mocked APIs in a disposable browser, without external
+writes. It checks immediate abandoned history, the voluntary-release explanation,
+terminal action suppression, keyboard tabs, and overflow at 320/600/900/1280 px.
+Inspect `tmp/reservation-browser/history-*.png` and `managed-*.png`.
+It uses Edge on Windows and Playwright Chromium elsewhere.

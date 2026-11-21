@@ -78,11 +78,14 @@ const JOB_LABELS: Record<string, string> = {
   db_backup:       'Database Backup',
   card_expiration_check: 'Card on File Expiration Check',
   reservation_canvas_rebuild: 'Reservation Canvas Rebuild',
+  reservation_slack_announcements: 'Daily Reservation Announcements',
   member_provisioning_reconciliation: 'Member Provisioning Reconciliation',
   volunteer_event_reminder: 'Volunteer Event Reminders',
   checkout_request_reminder: 'Checkout Request Reminders',
   checkout_request_digest: 'Checkout Request Digest',
   checkout_expiration_notice: 'Checkout Expiration Notices',
+  member_reminders: 'Member Reminder Emails',
+  rental_vacating_check: 'Rental Vacating Reminder',
 };
 
 const JOB_DESCRIPTIONS: Record<string, string> = {
@@ -95,11 +98,14 @@ const JOB_DESCRIPTIONS: Record<string, string> = {
   db_backup:       'Backs up the MongoDB database to Google Drive.',
   card_expiration_check: 'Finds active members with payment cards expiring this month, caches the results, and sends Slack notifications. Runs monthly, on the configured day, via a daily scheduled check.',
   reservation_canvas_rebuild: "Rebuilds today's and tomorrow's Slack reservation canvases and refreshes owner access.",
+  reservation_slack_announcements: 'Posts today’s shop and tool reservations from 7 AM Eastern, then updates the same channel summaries as bookings change. An external scheduler checks every ten minutes. Empty invitations follow each shop’s setting.',
   member_provisioning_reconciliation: 'Reconciles Slack/Google Drive provisioning state for all initialized members. Runs hourly.',
   volunteer_event_reminder: 'Sends reminder notifications for upcoming volunteer events. Runs daily.',
   checkout_request_reminder: 'Posts a still-waiting reminder in the Resource Managers channel for checkout requests open 5 or more days, repeating every 5 days until resolved. Runs daily.',
   checkout_expiration_notice: 'Sends grouped Slack and email warnings for upcoming checkout expiration, plus final expired notices. Runs only when invoked here or from the CLI.',
   checkout_request_digest: 'Sends each resource manager and approver a daily DM listing the open checkout requests they can act on, grouped by requester with the age of each request. Runs daily.',
+  rental_vacating_check: 'Posts one list to Members Relations of rentals still vacating after their end date and rentals a member says they have vacated, until staff verify the space is empty and release them. Never changes a rental. Runs daily.',
+  member_reminders: 'Sends the two member reminder emails (and a Slack DM) that are switched on above: the key fob reminder for members who paid but have no fob, and the finish-joining reminder for new signups. Runs daily.',
 };
 
 const formatDate = (dateStr: string | null): string => {
@@ -125,6 +131,22 @@ interface SettingRowProps {
 export const validateTicketBountyLimit = (value: string) =>
   /^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim()) && Number.isFinite(Number(value)) && Number(value) >= 0.5
     ? '' : 'Enter a number of at least 0.5.';
+
+// The server reads this with Ruby's Integer(), which parses a leading zero as octal ("030" would save
+// 24 minutes), so only a plain positive whole number is accepted.
+export const validateIdleTimeoutMinutes = (value: string) =>
+  /^[1-9]\d*$/.test(value) && Number.isSafeInteger(Number(value))
+    ? '' : 'Enter a whole number of minutes, at least 1, with no leading zero.';
+
+export const DEFAULT_IDLE_TIMEOUT_MINUTES = '30';
+
+export const MAX_REMINDER_DAYS = 14;
+export const DEFAULT_REMINDER_DAYS = '7';
+
+// Matches the server: a whole number from 1 to 14, so the second reminder stays inside the 30 day cutoff.
+export const validateReminderDays = (value: string) =>
+  /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= MAX_REMINDER_DAYS
+    ? '' : `Enter a whole number from 1 to ${MAX_REMINDER_DAYS}.`;
 
 export const SettingRow: React.FC<SettingRowProps> = ({ label, description, settingKey, value, onSave, saving, validate }) => {
   const [editing, setEditing] = React.useState(false);
@@ -361,6 +383,15 @@ export const SlackTab: React.FC<SlackTabProps> = ({
               value={config.slack.slack_channel_logs}
               onSave={onSettingSave}
               saving={savingKey === 'slack_channel_logs'}
+            />
+            <Divider style={{ margin: '8px 0' }} />
+            <SettingRow
+              label='Upcoming Events Channel'
+              description='Eventbrite announcements and daily reminders; blank uses upcoming-events. Existing messages stay in their original channel.'
+              settingKey='slack_channel_upcoming_events'
+              value={config.slack.slack_channel_upcoming_events || 'upcoming-events'}
+              onSave={onSettingSave}
+              saving={savingKey === 'slack_channel_upcoming_events'}
             />
             <Divider style={{ margin: '8px 0' }} />
             <SettingRow
@@ -721,6 +752,8 @@ const ReservationsTab: React.FC<{
 
 interface JobsTabProps {
   config: SystemConfigData;
+  onFlagToggle: (key: string, current: boolean) => Promise<void>;
+  togglingFlag: string | null;
   onRunJob: (key: string) => void;
   runningJob: string | null;
   jobMessage: Record<string, string>;
@@ -728,8 +761,80 @@ interface JobsTabProps {
   savingKey: string | null;
 }
 
-const JobsTab: React.FC<JobsTabProps> = ({ config, onRunJob, runningJob, jobMessage, onSettingSave, savingKey }) => (
+interface ReminderSettingProps {
+  title: string;
+  description: string;
+  flagKey: 'fob_reminder_enabled' | 'signup_reminder_enabled';
+  daysKey: 'fob_reminder_days' | 'signup_reminder_days';
+  daysLabel: string;
+}
+
+const REMINDER_SETTINGS: ReminderSettingProps[] = [
+  {
+    title: 'Key fob reminder',
+    description: 'Emails (and DMs on Slack) a member who has paid but has no key fob, asking them to come to an open house to pick it up. A second reminder follows 14 days later. Nothing is sent more than 30 days after the first payment.',
+    flagKey: 'fob_reminder_enabled',
+    daysKey: 'fob_reminder_days',
+    daysLabel: 'Days after first payment',
+  },
+  {
+    title: 'Finish-joining reminder',
+    description: 'Emails (and DMs on Slack) a new signup who has not paid or been issued a fob, inviting them to finish joining. A second reminder follows 14 days later. Nothing is sent more than 30 days after signing up.',
+    flagKey: 'signup_reminder_enabled',
+    daysKey: 'signup_reminder_days',
+    daysLabel: 'Days after signup',
+  },
+];
+
+const JobsTab: React.FC<JobsTabProps> = ({ config, onFlagToggle, togglingFlag, onRunJob, runningJob, jobMessage, onSettingSave, savingKey }) => (
   <Grid container spacing={2}>
+    <Grid size={{ xs: 12 }}>
+      <Card variant='outlined'>
+        <CardHeader
+          title='Member Reminder Emails'
+          subheader='Both are off until switched on here. The first email goes out the number of days below plus one (7 sends it on day 8). The Member Reminder Emails job below sends them daily.'
+        />
+        <Divider />
+        <CardContent>
+          {REMINDER_SETTINGS.map((reminder, index) => {
+            const enabled = !!config.flags[reminder.flagKey];
+            return (
+              <React.Fragment key={reminder.flagKey}>
+                {index > 0 && <Divider style={{ margin: '12px 0' }} />}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '4px 0' }}>
+                  <div style={{ flex: 1, paddingRight: 16 }}>
+                    <Typography variant='body1'><strong>{reminder.title}</strong></Typography>
+                    <Typography variant='body2' color='textSecondary'>{reminder.description}</Typography>
+                  </div>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        id={`${reminder.flagKey}-switch`}
+                        checked={enabled}
+                        onChange={() => onFlagToggle(reminder.flagKey, enabled)}
+                        disabled={togglingFlag === reminder.flagKey}
+                        color='primary'
+                      />
+                    }
+                    label={enabled ? 'On' : 'Off'}
+                    labelPlacement='start'
+                  />
+                </div>
+                <SettingRow
+                  label={reminder.daysLabel}
+                  description={`Whole number from 1 to ${MAX_REMINDER_DAYS}.`}
+                  settingKey={reminder.daysKey}
+                  value={config.reminders?.[reminder.daysKey] ?? DEFAULT_REMINDER_DAYS}
+                  onSave={onSettingSave}
+                  saving={savingKey === reminder.daysKey}
+                  validate={validateReminderDays}
+                />
+              </React.Fragment>
+            );
+          })}
+        </CardContent>
+      </Card>
+    </Grid>
     {config.checkout?.can_manage && <Grid size={{ xs: 12 }}>
       <Card variant="outlined"><CardContent><SettingRow
         label="Checkout expiration advance notice (days)" description="Whole number of at least 4 days. Second warning is 3 days before expiration. No automatic schedule is configured."
@@ -898,12 +1003,16 @@ const SecurityTab: React.FC = () => {
     require_totp_rm:    false,
     signup_lockout_enabled: false,
   });
+  const [idleTimeout, setIdleTimeout] = React.useState(DEFAULT_IDLE_TIMEOUT_MINUTES);
+  const [savingTimeout, setSavingTimeout] = React.useState(false);
 
   React.useEffect(() => {
     getSystemConfigs()
       .then(result => {
         const totp = (result as any)?.data?.totp;
         const systemFlags = (result as any)?.data?.flags;
+        const timeout = (result as any)?.data?.security?.devise_timeout_minutes;
+        if (timeout) setIdleTimeout(String(timeout));
         if (totp || systemFlags) {
           setFlags(prev => ({
             require_totp_admin: totp ? !!totp.require_totp_admin : prev.require_totp_admin,
@@ -919,6 +1028,15 @@ const SecurityTab: React.FC = () => {
         setLoading(false);
       });
   }, []);
+
+  const handleTimeoutSave = async (key: string, value: string) => {
+    setSavingTimeout(true);
+    try {
+      const { error: err } = await updateSystemSetting({ key, value });
+      if (err) throw new Error(err.message || 'Unable to save. Please try again.');
+      setIdleTimeout(value);
+    } finally { setSavingTimeout(false); }
+  };
 
   const handleToggle = async (key: string, value: boolean) => {
     setSaving(true);
@@ -970,6 +1088,25 @@ const SecurityTab: React.FC = () => {
         onToggle={handleToggle}
         saving={saving}
       />
+
+      <Grid size={{ xs: 12 }}><Divider style={{ margin: '16px 0' }} /></Grid>
+      <Grid size={{ xs: 12 }}>
+        <Typography variant='h6' gutterBottom>Sessions</Typography>
+        <Typography variant='body2' color='textSecondary' style={{ marginBottom: 16 }}>
+          A member who does nothing for this long is signed out and must sign in again.
+          It applies to everyone at once, including people already signed in. Members on a phone who
+          chose Stay logged in are not affected.
+        </Typography>
+        <SettingRow
+          label='Idle Session Timeout (minutes)'
+          description='Whole minutes of inactivity before sign-out. Default 30.'
+          settingKey='devise_timeout_minutes'
+          value={idleTimeout}
+          onSave={handleTimeoutSave}
+          saving={savingTimeout}
+          validate={validateIdleTimeoutMinutes}
+        />
+      </Grid>
 
       <Grid size={{ xs: 12 }}><Divider style={{ margin: '16px 0' }} /></Grid>
       <Grid size={{ xs: 12 }}>
@@ -1199,6 +1336,16 @@ const MemberPortalSettings: React.FC = () => {
           setConfig({ ...config, reservation: { ...config.reservation, [key]: value } });
         } else if (key === 'checkout_expiration_notice_days') {
           setConfig({ ...config, checkout: { ...config.checkout, checkout_expiration_notice_days: Number(value) } });
+        } else if (key === 'fob_reminder_days' || key === 'signup_reminder_days') {
+          setConfig({
+            ...config,
+            reminders: {
+              fob_reminder_days: DEFAULT_REMINDER_DAYS,
+              signup_reminder_days: DEFAULT_REMINDER_DAYS,
+              ...config.reminders,
+              [key]: value,
+            },
+          });
         } else if (key.endsWith('_day')) {
           setConfig({ ...config, job_schedule: { ...config.job_schedule, [key]: value } });
         }
@@ -1293,6 +1440,8 @@ const MemberPortalSettings: React.FC = () => {
         {activeTab === 'jobs' && (
           <JobsTab
             config={config}
+            onFlagToggle={handleFlagToggle}
+            togglingFlag={togglingFlag}
             onRunJob={handleRunJob}
             runningJob={runningJob}
             jobMessage={jobMessage}

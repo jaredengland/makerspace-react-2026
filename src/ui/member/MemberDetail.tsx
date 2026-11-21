@@ -16,6 +16,8 @@ import MemberRentalsTab from "ui/rentals/MemberRentalsTab";
 import { ActionButton } from "ui/common/ButtonRow";
 import { Whitelists, Routing } from "app/constants";
 import { getDetailsForMember } from "./constants";
+import { signupSourceSummary } from "./signupSources";
+import { eventLabel } from 'api/eventbrite';
 import AccessCardForm from "ui/accessCards/AccessCardForm";
 import ReportList from "ui/reports/ReportList";
 import TransactionsList from "ui/transactions/TransactionsList";
@@ -28,6 +30,7 @@ import NotificationModal, { Notification } from "./NotificationModal";
 import AdminChangePasswordModal from "./AdminChangePasswordModal";
 import HouseholdModal from "./HouseholdModal";
 import { HouseholdSetupBanner } from "./householdSetup";
+import StaffHouseholdPanel from "./StaffHouseholdPanel";
 import { ActiveRentalsBanner } from "./activeRentals";
 import PreviewMemberContract from "../documents/PreviewMemberContract";
 import { SubRoutes } from "ui/settings/SettingsContainer";
@@ -39,11 +42,13 @@ import MemberReservationsTab from "ui/reservations/MemberReservationsTab";
 import MemberVolunteerTab from "ui/volunteer/MemberVolunteerTab";
 import MemberCheckInActivity from "ui/member/MemberCheckInActivity";
 import MemberEmailLogTab from "ui/member/MemberEmailLogTab";
+import EventbriteBrowser from 'ui/eventbrite/EventbriteBrowser';
 import { EmailStatusIcon, SlackStatusIcon } from "ui/common/ContactStatusIcons";
 import GoogleDriveInviteButton from 'ui/member/GoogleDriveInviteButton';
 import GoogleDriveProvisioningBlockToggle from 'ui/member/GoogleDriveProvisioningBlockToggle';
 import SlackInviteButton from 'ui/member/SlackInviteButton';
 import MemberDeleteToggle from 'ui/member/MemberDeleteToggle';
+import ContinuousPaidMembership from 'ui/member/ContinuousPaidMembership';
 import FirebaseUnlinkButton from "ui/auth/FirebaseUnlinkButton";
 import {
   MemberProvisioning,
@@ -110,6 +115,7 @@ const MemberProfile: React.FC = () => {
     canManageShopFees,
     canManageCheckoutApprovers,
     canViewAuditLog,
+    canViewEventbriteHistory,
   } = useCapabilities();
 
   const {
@@ -401,8 +407,21 @@ const MemberProfile: React.FC = () => {
                   </a>
                 )}
             </KeyValueItem>}
+            <ContinuousPaidMembership member={member} />
             {member.notes && <KeyValueItem label="Notes">
               <div id="member-detail-notes" className="preformatted">{member.notes}</div>
+            </KeyValueItem>}
+            {canEditMembers && (member as any).signupSource && <KeyValueItem label="How they found us">
+              <span id="member-detail-signup-source">
+                {(member as any).signupEventbriteEventSnapshot ? eventLabel((member as any).signupEventbriteEventSnapshot) : signupSourceSummary((member as any).signupSource, (member as any).signupSourceDetail)}
+              </span>
+              {(member as any).referredByMemberId && (member as any).referredByMemberName && (
+                <div>
+                  Referred by <Link id="member-detail-referred-by" to={`${Routing.Members}/${(member as any).referredByMemberId}`}>
+                    {(member as any).referredByMemberName}
+                  </Link>
+                </div>
+              )}
             </KeyValueItem>}
             {((member as any).householdRole || canEditMembers) && (
               <KeyValueItem label="Household">
@@ -420,6 +439,7 @@ const MemberProfile: React.FC = () => {
                 {!(member as any).householdRole && canEditMembers && (
                   <span id="member-detail-household-role" style={{ color: "grey" }}>None</span>
                 )}
+                {canEditMembers && !!(member as any).householdRole && <StaffHouseholdPanel memberId={member.id} />}
               </KeyValueItem>
             )}
             {isOwnProfile && <PreviewMemberContract />}
@@ -471,6 +491,7 @@ const MemberProfile: React.FC = () => {
             displayName: "Email Log",
             content: <MemberEmailLogTab memberId={memberId} />
           }] : [],
+          ...canViewEventbriteHistory ? [{ name: 'eventbrite', displayName: 'Eventbrite', content: <EventbriteBrowser memberId={memberId} /> }] : [],
         ]}
       />
       {notification && <NotificationModal

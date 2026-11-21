@@ -59,14 +59,22 @@ Screenshots, videos and retry traces are in `tmp/playwright-results`.
 regular members land on `/home` (`?newMember=true` for pending members), while
 admins, board members, and resource managers retain their own profile landing.
 Tests that need profile tabs must call `MemberPage.gotoOwnProfile()` explicitly.
-`waitForProfile()` only waits for a profile that was already requested; it never
-changes the login destination. Signup tests assert the welcome Home destination
+`waitForProfile()` waits for the profile URL and Membership Status, which remains
+visible with billing disabled; it never changes the login destination.
+Signup tests assert the welcome Home destination
 before opening the profile for follow-up checks. `SettingsPage.goto()` uses the
 Home Account Settings link or the existing profile button, not the dropdown.
 `AuthPage.logout()` waits for the public login or landing controls to render;
 an SPA URL change and an already-fired DOMContentLoaded event are insufficient.
 Signing in again reuses a canonical `/login` navigation already in progress,
 while explicit return targets are cleared for the default-landing assertion.
+Header navigation uses MUI menu items: page helpers select the exact accessible
+name with `getByRole('menu').getByRole('menuitem', ...)`. Links elsewhere on a page
+still use the `link` role. `node tests/browser/header-menu.cjs` exercises all seven
+menu navigation helpers against the built UI with mocked APIs, including member
+profile/list, generic navigation, billing, rentals, checkouts and volunteer pages.
+Run it after menu changes alongside `node tests/browser/home.cjs`, which checks
+the login-to-profile flows used by the member smoke suite.
 `MemberRentalsPage.clickProceed()` verifies that signing an agreement opens
 `/members/:id/dues` with the Dues tab selected, rather than falling back to Home.
 
@@ -89,7 +97,40 @@ password is rejected, cleanup confirms the original password still works.
 This uses the API because the seeded `password` value is too weak for the UI's
 current validation. These are test-only changes; portal behavior is unchanged.
 
+The rental suite can run independently of the admin rental-creation test. Each
+payment attempt provisions a unique member, rental type, and spot through the API,
+and gives that member its own Braintree sandbox customer and saved Visa using the
+same sandbox nonce as the Rails seed. Retries and `--repeat-each` never reuse an
+earlier attempt's invoices or subscriptions. Fixture setup requires `BT_ENV=sandbox`
+and has a 120-second budget. Records remain in the disposable database for failure
+inspection until its next reset; sandbox customers/subscriptions remain upstream.
+The admin creation test also uses unique type/spot names on every attempt. The
+cancellation test in `05_admin_rentals_lifecycle.spec.ts` uses this same isolated
+fixture rather than depending on a spot created by the preceding suite. Fixture
+members include complete contact information so profile notifications do not
+redirect the rental flow to Personal Information settings.
+
+Payment confirmation registers a response listener before clicking Confirm,
+allows up to 60 seconds for `POST /api/billing/transactions`, and checks for HTTP
+200 before asserting the matching invoice receipt URL and success heading. An
+error response fails immediately instead of becoming a missing-button timeout.
+To check attempt isolation with the Rails/Braintree prerequisites above:
+
+```sh
+npx playwright test tests/e2e/suites/04_rentals.spec.ts --project=chromium --repeat-each=2
+```
+
 ## Ticket UI checks without backend credentials
+
+The Rails-backed reporter-anonymity and repair-bounty tests use separate browser
+contexts for the reporter, another member, and the admin. Each actor signs in
+normally. The anonymity test checks that an ordinary member cannot see the
+reporter or reveal control, while the admin explicitly reveals the reporter.
+The bounty test has the admin create a bounty for the reported ticket and a
+different member claim that same bounty. Separate cookie jars avoid an
+account-switching race where a late response restores the previous session after
+logout. Additional contexts close even if an assertion fails. Login/logout and
+session-restoration coverage remains in the authentication suites.
 
 `node scripts/check_fix_tickets.cjs --tickets-only` builds an isolated UI fixture
 and checks navigation, catalog loading/failure, cancellation, and the E2E page

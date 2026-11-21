@@ -263,6 +263,13 @@ labels use the same formatting; missing channels show "Not configured".
 
 ## Interaction, feedback, and accessibility
 
+The member profile's continuous paid membership control follows the shared MUI
+patterns. Its estimated-history chip includes a text explanation. Admin increases
+use a titled dialog with current/proposed values and a required correction reason.
+Loading/error states disable saving, Retry reloads failed reads, and a conflict
+refreshes current value/revision while preserving the proposed correction for
+review. See [feature behavior](continuous-paid-membership.md).
+
 Shop editing in `/workshops` reuses `EditShopModal` from `/tool-checkouts`.
 Tool creation and editing in both catalogs use `ToolEditorModal`, with the same
 fields, validation, and save behavior, including the pending-member checkbox. Load complete, permission-scoped management records before
@@ -370,3 +377,52 @@ and its expiration index first, then the complete portal bundle.
 The Reinstated status filter is limited to the authorized management roster,
 which uses the admin endpoint supporting reinstated pairs. My Tool Checkouts
 omits it; switching to that view resets an unsupported selection to Active.
+
+## Reader reservation release and history
+
+Abandoned bookings appear immediately in member history and manager terminal lists,
+even before their original end. The status is **Abandoned**, with “Released after
+no check-in within 15 minutes” and a note that fees are unchanged. Ordinary early
+owner logoff is **cancelled**, with its release explanation. Neither terminal state
+offers edit/approve/cancel actions or appears in active agendas.
+
+The reservation browser check covers small/medium/large layouts and keyboard tabs.
+The shared header logo has an SVG namespace and a shrinkable container so it does
+not push the menu beyond a narrow viewport.
+## Eventbrite and signup attribution
+
+The optional source question shares a component across password signup, first
+provider onboarding and staff member editing. It offers dated events, existing
+sources, Other with free text, an explicit decline and Referral from Member.
+Event loading failure leaves other answers available and offers Retry; Refresh
+event choices recovers a stale selection. Existing event snapshots survive edits.
+
+Resource Managers, Board and Admins see Eventbrite in the menu and member profile.
+The read-only browser uses Events/Orders/Attendees tabs, labeled filters, responsive
+cards, paging, and a details dialog for tickets/attendees. Loading, empty, error/
+Retry, invalid, refunded and email-link mismatch states are explicit. Ordinary
+members do not fetch imported history. Details use text and existing MUI styling;
+no private URLs, credentials or raw API payloads appear in the UI.
+
+The generated client 2.11.0 is temporarily a tested local package in `vendor/`
+(including the Eventbrite and paid membership contracts).
+After npm publication, replace its file dependency with registry version 2.11.0
+and regenerate `yarn.lock` before the coordinated release.
+
+## Upcoming Eventbrite channel
+
+Portal Settings → Slack includes Upcoming Events Channel using the existing
+editable setting row. Blank restores upcoming-events. The helper explains that
+existing messages remain in their original channel. The local settings wrapper
+handles the additive field without a generated-client release.
+
+## Header menu groups
+
+The right-hand menu keeps everyday navigation and Logout ahead of a final group,
+separated by a divider: Analytics, Audit Log, Billing, Eventbrite, Portal Settings.
+Use the shared capabilities to hide inaccessible items; Billing also requires its
+feature flag. Portal Settings remains admin-only. Hide the final divider when none
+of these items is available. Tool Checkouts remains available to all signed-in
+members for self-service, regardless of checkout-management capabilities.
+Navigation links use MUI MenuItem so arrow-key navigation, focus styling, Escape
+and keyboard activation work consistently with the other menu actions.

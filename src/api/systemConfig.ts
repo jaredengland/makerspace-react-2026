@@ -36,6 +36,7 @@ export interface JobStatus {
 }
 
 export interface SlackSettings {
+  slack_channel_upcoming_events?: string;
   slack_channel_treasurer: string;
   slack_channel_rm: string;
   slack_channel_admin: string;
@@ -69,6 +70,12 @@ export interface TotpSettings {
   require_totp_rm: boolean;
 }
 
+export interface SecuritySettings {
+  /** Minutes of inactivity before a signed-in member is signed out (server default 30). */
+  devise_timeout_minutes?: string;
+  ticket_open_limit?: number | string;
+}
+
 export interface ReservationSettings {
   reservation_token: string;
 }
@@ -82,6 +89,13 @@ export interface JobScheduleSettings {
   garbage_collect_day: string;
 }
 
+/** Days after a member's first payment / their signup before the first reminder email goes out
+ *  (7 sends it on day 8). Whole numbers 1 to 14, as strings like the other settings. */
+export interface ReminderSettings {
+  fob_reminder_days: string;
+  signup_reminder_days: string;
+}
+
 export interface SystemConfigData {
   checkout?: { checkout_expiration_notice_days: number; can_manage: boolean };
   flags: {
@@ -92,13 +106,18 @@ export interface SystemConfigData {
     require_totp_board: boolean;
     require_totp_rm: boolean;
     signup_lockout_enabled: boolean;
+    fob_reminder_enabled: boolean;
+    signup_reminder_enabled: boolean;
   };
   jobs: JobStatus[];
   slack: SlackSettings;
   volunteer: VolunteerSettings;
   totp: TotpSettings;
   reservation: ReservationSettings;
+  security?: SecuritySettings;
   job_schedule: JobScheduleSettings;
+  /** Absent from an older server. */
+  reminders?: ReminderSettings;
 }
 
 export type TemplateStatusValue =

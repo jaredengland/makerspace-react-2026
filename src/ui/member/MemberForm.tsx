@@ -19,8 +19,13 @@ import { toDatePicker } from "ui/utils/timeToDate";
 import { memberStatusLabelMap } from "./MemberStatusLabel";
 import { ActiveRentalsStatusNote } from "./activeRentals";
 import { states } from "./states";
+import { REFERRAL_SIGNUP_SOURCE } from "./signupSources";
+import MemberSearchInput from "ui/common/MemberSearchInput";
 import { listShops } from "api/toolCheckouts";
 import { Shop } from "app/entities/toolCheckout";
+import { SignupSourceQuestion } from './SignupSourceQuestion';
+import { sourcePayload } from 'api/eventbrite';
+const sourceChoice = (member: any) => member?.signupSource === 'eventbrite' ? `event:${member.signupEventbriteEventId}` : member?.signupSource || '';
 
 // Mirrors Member::RESOURCE_MANAGER_TAGGABLE_ROLES on the backend -- an admin
 // or board member already manages every shop regardless of this tagging, but
@@ -47,6 +52,9 @@ interface State {
   subscription: boolean;
   silenceEmails: boolean;
   role: string;
+  signupSource: string;
+  signupSourceDetail: string;
+  referredByMemberId: string;
   resourceManagerShopIds: string[];
   shops: Shop[];
 }
@@ -62,6 +70,9 @@ class MemberForm extends React.Component<OwnProps, State> {
       subscription: false,
       silenceEmails: false,
       role: props.member?.role || "member",
+      signupSource: sourceChoice(props.member),
+      signupSourceDetail: (props.member as any)?.signupSourceDetail || '',
+      referredByMemberId: (props.member as any)?.referredByMemberId || "",
       resourceManagerShopIds: (props.member as any)?.resourceManagerShopIds || [],
       shops: [],
     }
@@ -74,6 +85,9 @@ class MemberForm extends React.Component<OwnProps, State> {
       subscription: member && member.subscription || false,
       silenceEmails: member && !!member.silenceEmails || false,
       role: member?.role || "member",
+      signupSource: sourceChoice(member),
+      signupSourceDetail: (member as any)?.signupSourceDetail || '',
+      referredByMemberId: (member as any)?.referredByMemberId || "",
       resourceManagerShopIds: (member as any)?.resourceManagerShopIds || []
     });
     listShops().then(result => this.setState({ shops: (result.data || []) as Shop[] }));
@@ -88,6 +102,9 @@ class MemberForm extends React.Component<OwnProps, State> {
         subscription: member && member.subscription || false,
         silenceEmails: member && !!member.silenceEmails || false,
         role: member?.role || "member",
+        signupSource: sourceChoice(member),
+        signupSourceDetail: (member as any)?.signupSourceDetail || '',
+        referredByMemberId: (member as any)?.referredByMemberId || "",
         resourceManagerShopIds: (member as any)?.resourceManagerShopIds || []
       });
       this.formRef && this.formRef.resetForm();
@@ -116,9 +133,12 @@ class MemberForm extends React.Component<OwnProps, State> {
     const updatedMember = await form.simpleValidate<Member>(fields);
     return {
       ...updatedMember,
+      ...isAdmin && sourcePayload(this.state.signupSource, this.state.signupSourceDetail),
       silenceEmails,
       memberContractOnFile,
       subscription,
+      // The linked referrer only applies to "friend"; sending blank clears it.
+      ...isAdmin && { referredByMemberId: this.state.signupSource === REFERRAL_SIGNUP_SOURCE ? this.state.referredByMemberId : "" },
       resourceManagerShopIds: RESOURCE_MANAGER_TAGGABLE_ROLES.includes(this.state.role) ? this.state.resourceManagerShopIds : [],
     };
   }
@@ -339,6 +359,26 @@ class MemberForm extends React.Component<OwnProps, State> {
               multiline
             />
           </Grid>
+          <Grid size={{ xs: 12 }}>
+            <input type="hidden" name={fields.signupSource.name} value={sourcePayload(this.state.signupSource).signupSource} />
+            <SignupSourceQuestion value={this.state.signupSource} detail={this.state.signupSourceDetail}
+              onChange={value => this.setState({ signupSource: value })} onDetail={value => this.setState({ signupSourceDetail: value })}
+              savedEvent={(member as any).signupEventbriteEventSnapshot ? { id: (member as any).signupEventbriteEventId, ...(member as any).signupEventbriteEventSnapshot } : undefined} />
+          </Grid>
+          {this.state.signupSource === REFERRAL_SIGNUP_SOURCE && (
+            <Grid size={{ xs: 12 }}>
+              <FormLabel component="legend">Link the member who referred them</FormLabel>
+              <MemberSearchInput
+                name="member-form-referredByMember"
+                placeholder="Search members by name or email..."
+                excludeIds={member.id ? [member.id] : []}
+                initialSelection={(member as any).referredByMemberId
+                  ? { value: (member as any).referredByMemberId, label: (member as any).referredByMemberName || "", id: (member as any).referredByMemberId }
+                  : undefined}
+                onChange={selection => this.setState({ referredByMemberId: selection?.value || "" })}
+              />
+            </Grid>
+          )}
           <Grid size={{ xs: 12 }}>
             <FormControlLabel
               control={
